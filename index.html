@@ -774,8 +774,9 @@ async function calculate() {
       };
     }));
 
-    // จัดเรียงพล็อตข้อมูลตามลำดับระดับความสูงจากมากไปน้อยเพื่อไม่ให้กราฟพล็อตเส้นสลับมั่ว
-    data.sort((a,b) => b.alt_m - a.alt_m);
+    // จัดเรียงพล็อตข้อมูลตามลำดับแถวเดิม (Chronological Order)
+data.sort((a,b) => a.idx - b.idx);
+    
 
     const peakQ  = data.reduce((a,b)=>b.q_sg>a.q_sg?b:a);
     const peakTw = data.reduce((a,b)=>b.Tw>a.Tw?b:a);
@@ -830,13 +831,11 @@ function renderResult(res, name, notes) {
     </tr>`;
   }).join('');
 
-  const alts =data.map(r=>(r.alt_m/1000).toFixed(2));
+  const rowIndices = data.map(r => r.idx); // ใช้ลำดับแถวเป็นแกน X
   const temps =data.map(r=>r.Tw-273.15);
   const stags =data.map(r=>r.T_stag-273.15);
   const qvals =data.map(r=>r.q_sg/1e6);
-  const machs =data.map(r=>r.Mach);
-
-  document.getElementById('rb').innerHTML=`
+  const machs =data.map(r=>r.Mach);ความสูงument.getElementById('rb').innerHTML=`
     <div class="hbadge ${cls}">${lbl}</div>
     ${notesHtml}
     <div class="sum-grid">
@@ -855,15 +854,14 @@ function renderResult(res, name, notes) {
     </div>
     <div class="charts-row">
       <div class="chart-box">
-        <div class="ct">T_w vs ความสูง</div>
+        <div class="ct">T_w vs ลำดับแถว</div>
         <canvas id="c1" height="150"></canvas>
         <div class="legend">
           <div class="leg"><div class="leg-dot" style="background:#ff4d00"></div>T_w (°C)</div>
           <div class="leg"><div class="leg-dot" style="background:#00d4ff"></div>T_stag (°C)</div>
         </div>
-      </div>
-      <div class="chart-box">
-        <div class="ct">q̇ & Mach vs ความสูง</div>
+     <div class="chart-box">
+        <div class="ct">q̇ & Mach vs ลำดับแถว</div>
         <canvas id="c2" height="150"></canvas>
         <div class="legend">
           <div class="leg"><div class="leg-dot" style="background:#ff8c42"></div>q̇ (MW/ม²)</div>
@@ -872,8 +870,7 @@ function renderResult(res, name, notes) {
       </div>
     </div>
     <div style="font-size:9px;color:var(--txt2);letter-spacing:1px;text-transform:uppercase;margin-bottom:5px;">
-      ตารางผลลัพธ์
-      <span style="color:var(--fire);margin-left:6px;">█ peak</span>
+      ตารางผลลัพธ์ <span style="color:var(--fire);margin-left:6px;">█ peak</span>
       <span style="color:var(--teal);margin-left:6px;">█ 30°C (ต่ำสุด)</span>
     </div>
     <div class="tbl-wrap" style="max-height:240px;overflow-y:auto;">
@@ -900,10 +897,9 @@ function renderResult(res, name, notes) {
   `;
 
   setTimeout(()=>{
-    drawChart('c1', alts, temps,  stags, '#ff4d00','#00d4ff');
-    drawChart('c2', alts, qvals,  machs, '#ff8c42','#3fb950');
-  },40);
-      }
+  drawChart('c1', rowIndices, temps,  stags, '#ff4d00','#00d4ff');
+  drawChart('c2', rowIndices, qvals,  machs, '#ff8c42','#3fb950');
+},40);    
 
     function escHtml(s){ return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 
