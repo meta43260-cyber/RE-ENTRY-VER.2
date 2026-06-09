@@ -84,16 +84,20 @@
             flex: 1;
             background-color: #070a13;
             border: 1px solid var(--border-color);
-            padding: 8px;
+            padding: 10px 5px;
             text-align: center;
             border-radius: 6px;
             font-size: 0.85rem;
             cursor: pointer;
+            user-select: none;
+            transition: all 0.2s ease;
         }
 
         .radio-tile.active {
             border-color: var(--accent-blue);
-            background-color: rgba(0, 188, 212, 0.1);
+            background-color: rgba(0, 188, 212, 0.15);
+            color: white;
+            font-weight: bold;
         }
 
         input[type="text"], input[type="number"], textarea {
@@ -204,22 +208,22 @@
         <br>
 
         <label style="font-size: 0.85rem; color: var(--text-muted);">หน่วยความสูงในไฟล์</label>
-        <div class="radio-tile-group">
-            <div class="radio-tile active">ม.</div>
-            <div class="radio-tile">กม.</div>
-            <div class="radio-tile">ฟุต</div>
+        <div class="radio-tile-group" id="altitudeUnitGroup">
+            <div class="radio-tile active" data-value="m">ม.</div>
+            <div class="radio-tile" data-value="km">กม.</div>
+            <div class="radio-tile" data-value="ft">ฟุต</div>
         </div>
 
         <label style="font-size: 0.85rem; color: var(--text-muted);">หน่วยความเร็วในไฟล์</label>
-        <div class="radio-tile-group">
-            <div class="radio-tile active">ม/วิ</div>
-            <div class="radio-tile">กม/ชม</div>
-            <div class="radio-tile">มัค</div>
+        <div class="radio-tile-group" id="speedUnitGroup">
+            <div class="radio-tile active" data-value="ms">ม/วิ</div>
+            <div class="radio-tile" data-value="kmh">กม/ชม</div>
+            <div class="radio-tile" data-value="mach">มัค</div>
         </div>
 
         <div class="drop-zone" id="dropZone">
             <div style="font-size: 2rem;">📊</div>
-            <p>กดเลือกไฟล์หรือลากไฟล์มาวางที่นี่</p>
+            <p id="dropZoneText">กดเลือกไฟล์หรือลากไฟล์มาวางที่นี่</p>
             <span>รองรับไฟล์ตาราง .csv และ .xlsx (Excel)</span>
             <input type="file" id="fileInput" accept=".csv,.txt,.xlsx" style="display: none;">
         </div>
@@ -259,7 +263,7 @@
 
         <div class="input-group">
             <label>📝 บันทึกภารกิจ</label>
-            <textarea id="notes" rows="3" placeholder="บันทึกสภาพการบิน, หมายเหตุ, ผลสังเกต..."></textarea>
+            <textarea id="notes" rows="3" placeholder="บันทึกสภาพการบิน..."></textarea>
         </div>
 
         <button class="btn-calc" id="btnCalculate">🔥 คำนวณความร้อนทุกจุด</button>
@@ -278,37 +282,65 @@
     </div>
 
     <script>
+        // --- 1. ตั้งค่า Elements และ Global State ---
         const dropZone = document.getElementById('dropZone');
+        const dropZoneText = document.getElementById('dropZoneText');
         const fileInput = document.getElementById('fileInput');
         const btnCalculate = document.getElementById('btnCalculate');
         const resultsPanel = document.getElementById('resultsPanel');
         
-        let parsedTelemetryData = [];
+        let parsedTelemetryData = []; // เก็บข้อมูล Global ป้องกันค่าหายสลับหน้าจอ
         let twChartInstance = null;
         let qChartInstance = null;
 
+        // --- 2. ระบบปุ่มเลือกหน่วยความสูง/ความเร็ว (แก้บั๊กกดไม่ได้) ---
+        function setupRadioGroup(groupId) {
+            const group = document.getElementById(groupId);
+            const tiles = group.querySelectorAll('.radio-tile');
+            tiles.forEach(tile => {
+                tile.addEventListener('click', function() {
+                    tiles.forEach(t => t.classList.remove('active'));
+                    this.classList.add('active');
+                });
+            });
+        }
+        setupRadioGroup('altitudeUnitGroup');
+        setupRadioGroup('speedUnitGroup');
+
+        function getActiveUnit(groupId) {
+            const activeTile = document.getElementById(groupId).querySelector('.radio-tile.active');
+            return activeTile ? activeTile.getAttribute('data-value') : '';
+        }
+
+        // --- 3. ระบบจัดการลากวางไฟล์และเลือกไฟล์ ---
         dropZone.addEventListener('click', () => fileInput.click());
+
         ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(ev => {
             dropZone.addEventListener(ev, e => { e.preventDefault(); e.stopPropagation(); }, false);
         });
+
         dropZone.addEventListener('drop', e => {
             const files = e.dataTransfer.files;
-            if (files.length > 0) handleFile(files[0]);
-        });
-        fileInput.addEventListener('change', e => {
-            if (e.target.files.length > 0) handleFile(e.target.files[0]);
+            if (files.length > 0) processFile(files[0]);
         });
 
-        function handleFile(file) {
-            dropZone.querySelector('p').innerText = `เลือกไฟล์สำเร็จ: ${file.name}`;
+        fileInput.addEventListener('change', e => {
+            if (e.target.files.length > 0) processFile(e.target.files[0]);
+        });
+
+        function processFile(file) {
+            dropZoneText.innerText = `เลือกไฟล์สำเร็จ: ${file.name}`;
+            dropZoneText.style.color = '#10b981';
+            
             const reader = new FileReader();
             reader.onload = function(e) {
+                // อัปเดตข้อมูลเข้าตัวแปรตัวกลางทันทีหลังอ่านเสร็จ
                 parsedTelemetryData = parseAndFixTelemetry(e.target.result);
             };
             reader.readAsText(file);
         }
 
-        // ตัวแกะสตรีมข้อความดักจับ KMIH และแปลงให้เข้าโมเดลคำนวณเดิมได้ทันที
+        // --- 4. ตัวคัดกรองข้อมูลประมวลผล (Parser) ดักจับฟอร์แมตใหม่และ KMIH ---
         function parseAndFixTelemetry(text) {
             const lines = text.split('\n');
             const dataResult = [];
@@ -318,34 +350,33 @@
                 let currentLine = line.trim();
                 if (!currentLine) return;
 
-                let speedKmh = 0;
-                let altKm = 0;
+                let speedVal = 0;
+                let altVal = 0;
 
                 if (currentLine.includes('SPEED') && currentLine.includes('ALTITUDE')) {
                     const speedMatch = currentLine.match(/SPEED\s+(\d+)/i);
                     const altMatch = currentLine.match(/ALTITUDE\s+(\d+)/i);
                     if (speedMatch && altMatch) {
-                        speedKmh = parseInt(speedMatch[1], 10);
-                        altKm = parseInt(altMatch[1], 10);
+                        speedVal = parseInt(speedMatch[1], 10);
+                        altVal = parseInt(altMatch[1], 10); // อิงโครงสร้างอ่านค่าดั้งเดิมของคุณ
                     }
                 } else {
                     const match = currentLine.match(flexibleRegex);
                     if (match) {
-                        speedKmh = parseInt(match[1], 10);
-                        altKm = parseInt(match[2], 10);
+                        speedVal = parseInt(match[1], 10);
+                        altVal = parseInt(match[2], 10);
                     }
                 }
 
-                if (speedKmh > 0 || altKm > 0) {
-                    dataResult.push({ speedKmh: speedKmh, altKm: altKm });
+                if (speedVal > 0 || altVal > 0) {
+                    dataResult.push({ rawSpeed: speedVal, rawAltitude: altVal });
                 }
             });
             return dataResult;
         }
 
-        // ฟังก์ชันคำนวณสภาวะบรรยากาศอิงตารางหนาแน่นแบบ NRLMSISE-00 ดั้งเดิมของเว็บคุณ
+        // --- 5. สภาวะบรรยากาศอิงข้อมูลตารางประวัติ NRLMSISE-00 ---
         function getNrlmsiseDensity(altKm, lat, lon) {
-            // โมเดลคำนวณโครงสร้างดั้งเดิม คืนค่าความหนาแน่นเชิงฟังก์ชันตามระดับความสูงจริงที่แกะจาก Array ตารางข้อมูล
             const alt = parseFloat(altKm);
             if (alt > 80) return 1.8e-8;
             if (alt > 60) return 3.0e-7;
@@ -354,11 +385,13 @@
             if (alt > 20) return 8.8e-5;
             if (alt > 15) return 1.9e-4;
             if (alt > 11) return 3.6e-4;
-            return 1.225 * Math.exp(-alt / 7.5); // Interpolate ส่วนปลาย
+            return 1.225 * Math.exp(-alt / 7.5);
         }
 
+        // --- 6. ปุ่มคํานวณประมวลผลฟิสิกส์ความร้อน ---
         btnCalculate.addEventListener('click', () => {
-            if (parsedTelemetryData.length === 0) {
+            // ดักแก้วิ่งชนปัญหาล้างค่า ตัวแปรอาศัยตรวจสอบความยาวอาร์เรย์ตัวกลาง
+            if (!parsedTelemetryData || parsedTelemetryData.length === 0) {
                 alert("กรุณาเลือกไฟล์ก่อนครับ");
                 return;
             }
@@ -369,15 +402,27 @@
             const lon = parseFloat(document.getElementById('lon').value);
             const sigma = 5.67e-8;
 
+            const altUnit = getActiveUnit('altitudeUnitGroup');
+            const speedUnit = getActiveUnit('speedUnitGroup');
+
             let maxTw = 0, maxQ = 0, maxMach = 0, sumTw = 0;
             const labels = [], twData = [], qData = [], machData = [];
 
             parsedTelemetryData.forEach(data => {
-                const vMs = (data.speedKmh * 1000) / 3600;
-                const mach = vMs / 295.0; // ค่าคงที่ดั้งเดิมของโปรเจกต์คุณ
+                // แปลงหน่วยความสูงเข้าสู่แกนมาตรฐานกิโลเมตร
+                let altKm = data.rawAltitude;
+                if (altUnit === 'm') altKm = data.rawAltitude / 1000;
+                if (altUnit === 'ft') altKm = data.rawAltitude * 0.0003048;
 
-                // เรียกใช้โมเดลบรรยากาศเดิมดั้งเดิม
-                const rho = getNrlmsiseDensity(data.altKm, lat, lon);
+                // แปลงหน่วยความเร็วเข้าสู่เมตรต่อวินาที (m/s)
+                let vMs = data.rawSpeed;
+                if (speedUnit === 'kmh') vMs = (data.rawSpeed * 1000) / 3600;
+                if (speedUnit === 'mach') vMs = data.rawSpeed * 295.0;
+
+                const mach = vMs / 295.0; // ดึงอ้างอิงความเร็วเสียงดั้งเดิม
+
+                // ประมวลผลร่วมกับค่าสภาพบรรยากาศจริง
+                const rho = getNrlmsiseDensity(altKm, lat, lon);
                 
                 let q_dot = 1.103e-4 * Math.sqrt(rho / Rn) * Math.pow(vMs, 3);
                 q_dot = q_dot / 1000000; 
@@ -390,7 +435,7 @@
                 if (mach > maxMach) maxMach = mach;
                 sumTw += tw_celsius;
 
-                labels.push(data.altKm);
+                labels.push(altKm.toFixed(1));
                 twData.push(tw_celsius);
                 qData.push(q_dot.toFixed(4));
                 machData.push(mach.toFixed(2));
@@ -434,7 +479,5 @@
         }
     </script>
 </body>
-</html>
-  
-
+    </html>
     
